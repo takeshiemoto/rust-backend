@@ -4,7 +4,7 @@ Rust web development .
 
 ## Getting Started
 
-```rust
+```shell
 cargo run
 ```
 
