@@ -1,5 +1,6 @@
 mod handlers;
 mod models;
+mod validators;
 
 use crate::handlers::user_handlers::{
     create_users, delete_users, get_users, get_users_by_id, update_users,
