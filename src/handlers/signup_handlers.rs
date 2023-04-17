@@ -2,14 +2,29 @@ use crate::models::app_state::AppState;
 use actix_web::{web, Error, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct SignupRequest {
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
-    #[validate(length(min = 4, message = "Password must be at least 4 characters long"))]
+    #[validate(custom(
+        code = "password",
+        function = "validate_password",
+        message = "Invalid password"
+    ))]
     pub password: String,
+}
+
+fn validate_password(password: &str) -> Result<(), ValidationError> {
+    if password.len() < 8
+        || password.contains(char::is_whitespace)
+        || !password.chars().any(char::is_numeric)
+        || !password.chars().any(char::is_uppercase)
+    {
+        return Err(ValidationError::new("Invalid password"));
+    }
+    Ok(())
 }
 
 pub async fn signup(
