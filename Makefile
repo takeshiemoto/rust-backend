@@ -23,3 +23,9 @@ migrate-up:
 .PHONY: migrate-down
 migrate-down:
 	sqlx migrate rollback --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
+
+.PHONY: setup-db
+setup-db:
+	docker-compose up -d db
+	sleep 5
+	sqlx migrate run --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)

@@ -1,21 +1,5 @@
 # rust-backend
 
-Rust web development .
+## Initial Setup
 
-## Getting Started
-
-```shell
-cargo run
-```
-
-## Database
-
-WIP
-
-## Logging
-
-WIP
-
-## Testing
-
-WIP
+Copy `.env.sample` to create `.env` file. Enter the values for the local Postgres in .env file.
