@@ -1,6 +1,4 @@
-POSTGRES_USER=todo_user
-POSTGRES_PASSWORD=todo_password
-POSTGRES_DB=todo_db
+include .env
 
 .PHONY: recreate-db
 recreate-db: stop-db
