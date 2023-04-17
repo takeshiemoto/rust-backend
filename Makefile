@@ -5,8 +5,8 @@ recreate-db: stop-db
 	docker-compose rm -fv db
 	docker-compose up -d db
 	sleep 5
-	sqlx database create --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
-	sqlx migrate run --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
+	sqlx database create --database-url=$(DATABASE_URL)
+	sqlx migrate run --database-url=$(DATABASE_URL)
 
 .PHONY: start-db
 start-db:
@@ -18,14 +18,14 @@ stop-db:
 
 .PHONY: migrate-up
 migrate-up:
-	sqlx migrate run --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
+	sqlx migrate run --database-url=$(DATABASE_URL)
 
 .PHONY: migrate-down
 migrate-down:
-	sqlx migrate rollback --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
+	sqlx migrate rollback --database-url=$(DATABASE_URL)
 
 .PHONY: setup-db
 setup-db:
 	docker-compose up -d db
 	sleep 5
-	sqlx migrate run --database-url=postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost/$(POSTGRES_DB)
+	sqlx migrate run --database-url=$(DATABASE_URL)

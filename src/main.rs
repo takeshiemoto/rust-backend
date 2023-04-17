@@ -4,17 +4,20 @@ mod models;
 use crate::handlers::user_handlers::{
     create_users, delete_users, get_users, get_users_by_id, update_users,
 };
+use std::env;
 
 use crate::handlers::signup_handlers::{signup, signup_complete};
 use crate::models::app_state::AppState;
 use actix_web::{web, App, HttpServer};
+use dotenvy::dotenv;
 use sqlx::PgPool;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    const DB_URL: &str = "postgres://todo_user:todo_password@localhost:5432/todo_db";
+    dotenv().ok();
 
-    let pool = PgPool::connect(DB_URL).await.unwrap();
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPool::connect(&db_url).await.unwrap();
     let app_state = AppState { pool };
 
     HttpServer::new(move || {
