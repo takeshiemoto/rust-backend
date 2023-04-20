@@ -15,7 +15,7 @@ impl error::ResponseError for Error {
         match self {
             Error::ValidationError(_) => actix_web::http::StatusCode::BAD_REQUEST,
             Error::DatabaseQueryError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Error::InternalServerError => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            _ => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 

@@ -5,7 +5,6 @@ use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument};
 use validator::Validate;
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -38,7 +37,8 @@ pub async fn signup(
     json.validate().map_err(Error::ValidationError)?;
 
     let email = json.email.clone();
-    let password = hash(json.password.clone(), DEFAULT_COST).unwrap();
+    let password =
+        hash(json.password.clone(), DEFAULT_COST).map_err(|_| Error::InternalServerError)?;
 
     sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2)")
         .bind(email.clone())
@@ -47,15 +47,16 @@ pub async fn signup(
         .await
         .map_err(Error::DatabaseQueryError)?;
 
-    let expiration = 3600;
+    const EXPIRATION: u64 = 30;
+
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .map_err(|_| Error::InternalServerError)?
         .as_secs();
 
     let claims = Claims {
         sub: email,
-        exp: now + expiration,
+        exp: now + EXPIRATION,
     };
 
     let secret_key = "secret";
@@ -64,7 +65,7 @@ pub async fn signup(
         &claims,
         &EncodingKey::from_secret(secret_key.as_ref()),
     )
-    .unwrap();
+    .map_err(|_| Error::InternalServerError)?;
 
     let signup_response = SignupResponse { token };
     Ok(HttpResponse::Ok().json(signup_response))
@@ -75,8 +76,6 @@ pub struct SignupVerifyQuery {
     pub token: String,
 }
 
-#[instrument]
-pub async fn signup_verify(query: web::Query<SignupVerifyQuery>) -> impl Responder {
-    info!(query.token);
+pub async fn signup_verify() -> impl Responder {
     HttpResponse::Ok().body("signup_complete")
 }
