@@ -1,5 +1,6 @@
 use actix_web::{error, HttpResponse};
 use derive_more::{Display, Error};
+use serde::Serialize;
 
 use tracing::log::error;
 
@@ -8,6 +9,13 @@ pub enum Error {
     Validation(validator::ValidationErrors),
     DatabaseQuery(sqlx::Error),
     Internal,
+}
+
+#[derive(Serialize)]
+pub struct ErrorResponse {
+    pub code: String,
+    pub message: String,
+    pub details: Vec<validator::ValidationErrors>,
 }
 
 impl error::ResponseError for Error {
@@ -21,12 +29,30 @@ impl error::ResponseError for Error {
 
     fn error_response(&self) -> HttpResponse {
         match self {
-            Error::Validation(e) => HttpResponse::BadRequest().json(e),
-            Error::DatabaseQuery(e) => {
-                error!("Database query error: {}", e);
-                HttpResponse::InternalServerError().body("Database query error")
+            Error::Validation(e) => {
+                error!("Validation error: {:?}", self);
+                HttpResponse::BadRequest().json(ErrorResponse {
+                    code: "validation_error".to_string(),
+                    message: "Validation error".to_string(),
+                    details: vec![e.clone()],
+                })
             }
-            _ => HttpResponse::InternalServerError().finish(),
+            Error::DatabaseQuery(e) => {
+                error!("Database query error: {:?}", e);
+                HttpResponse::BadRequest().json(ErrorResponse {
+                    code: "internal_error".to_string(),
+                    message: e.to_string(),
+                    details: vec![],
+                })
+            }
+            _ => {
+                error!("Internal error: {:?}", self);
+                HttpResponse::InternalServerError().json(ErrorResponse {
+                    code: "internal_error".to_string(),
+                    message: "Internal error".to_string(),
+                    details: vec![],
+                })
+            }
         }
     }
 }
