@@ -34,24 +34,23 @@ pub async fn signup(
     json: web::Json<SignupRequest>,
     app_state: web::Data<AppState>,
 ) -> Result<impl Responder, Error> {
-    json.validate().map_err(Error::ValidationError)?;
+    json.validate().map_err(Error::Validation)?;
 
     let email = json.email.clone();
-    let password =
-        hash(json.password.clone(), DEFAULT_COST).map_err(|_| Error::InternalServerError)?;
+    let password = hash(json.password.clone(), DEFAULT_COST).map_err(|_| Error::Internal)?;
 
     sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2)")
         .bind(email.clone())
         .bind(password.clone())
         .execute(&app_state.pool)
         .await
-        .map_err(Error::DatabaseQueryError)?;
+        .map_err(Error::DatabaseQuery)?;
 
     const EXPIRATION: u64 = 30;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| Error::InternalServerError)?
+        .map_err(|_| Error::Internal)?
         .as_secs();
 
     let claims = Claims {
@@ -65,7 +64,7 @@ pub async fn signup(
         &claims,
         &EncodingKey::from_secret(secret_key.as_ref()),
     )
-    .map_err(|_| Error::InternalServerError)?;
+    .map_err(|_| Error::Internal)?;
 
     let signup_response = SignupResponse { token };
     Ok(HttpResponse::Ok().json(signup_response))

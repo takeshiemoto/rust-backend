@@ -5,28 +5,28 @@ use tracing::log::error;
 
 #[derive(Debug, Display, Error)]
 pub enum Error {
-    ValidationError(validator::ValidationErrors),
-    DatabaseQueryError(sqlx::Error),
-    InternalServerError,
+    Validation(validator::ValidationErrors),
+    DatabaseQuery(sqlx::Error),
+    Internal,
 }
 
 impl error::ResponseError for Error {
     fn status_code(&self) -> actix_web::http::StatusCode {
         match self {
-            Error::ValidationError(_) => actix_web::http::StatusCode::BAD_REQUEST,
-            Error::DatabaseQueryError(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Validation(_) => actix_web::http::StatusCode::BAD_REQUEST,
+            Error::DatabaseQuery(_) => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
             _ => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn error_response(&self) -> HttpResponse {
         match self {
-            Error::ValidationError(e) => HttpResponse::BadRequest().json(e),
-            Error::DatabaseQueryError(e) => {
+            Error::Validation(e) => HttpResponse::BadRequest().json(e),
+            Error::DatabaseQuery(e) => {
                 error!("Database query error: {}", e);
                 HttpResponse::InternalServerError().body("Database query error")
             }
-            Error::InternalServerError => HttpResponse::InternalServerError().finish(),
+            Error::Internal => HttpResponse::InternalServerError().finish(),
         }
     }
 }
