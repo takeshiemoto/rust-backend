@@ -1,3 +1,4 @@
+mod errors;
 mod handlers;
 mod models;
 mod validators;
@@ -7,7 +8,7 @@ use crate::handlers::user_handlers::{
 };
 use std::env;
 
-use crate::handlers::signup_handlers::{signup, signup_complete};
+use crate::handlers::signup_handlers::{signup, signup_verify};
 use crate::models::app_state::AppState;
 use actix_web::{web, App, HttpServer};
 use dotenvy::dotenv;
@@ -48,7 +49,7 @@ async fn main() -> std::io::Result<()> {
                         .service(
                             web::scope("/signup")
                                 .route("", web::post().to(signup))
-                                .route("/complete", web::get().to(signup_complete)),
+                                .route("/verify", web::get().to(signup_verify)),
                         ),
                 ),
             )
