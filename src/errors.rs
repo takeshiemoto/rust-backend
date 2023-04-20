@@ -26,7 +26,7 @@ impl error::ResponseError for Error {
                 error!("Database query error: {}", e);
                 HttpResponse::InternalServerError().body("Database query error")
             }
-            Error::Internal => HttpResponse::InternalServerError().finish(),
+            _ => HttpResponse::InternalServerError().finish(),
         }
     }
 }
