@@ -1,17 +1,12 @@
 # rust-backend
 
-## Initial Setup
+## Getting Started
 
-Copy `.env.sample` to create `.env` file. Enter the values for the local Postgres in .env file.
+1. Copy `.env.sample` to create `.env` file.
+2. Fill in the necessary environment variables in the `.env` file.
+3. Run `cargo run` to start the development server.
 
-Next, execute the following command to setup the database:
+## Dependencies
 
-```shell
-make setup-db
-```
-
-## Usage
-
-```shell
-cargo run
-```
+* Actix web framework
+* SQLx
