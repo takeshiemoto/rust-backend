@@ -4,7 +4,10 @@ use crate::validators::password_validator::validate_password;
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
 use jsonwebtoken::{encode, EncodingKey, Header};
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
+use std::env;
 use validator::Validate;
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -17,11 +20,6 @@ pub struct SignupRequest {
         message = "Invalid password"
     ))]
     pub password: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SignupResponse {
-    pub token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,7 +52,7 @@ pub async fn signup(
         .as_secs();
 
     let claims = Claims {
-        sub: email,
+        sub: email.clone(),
         exp: now + EXPIRATION,
     };
 
@@ -66,8 +64,30 @@ pub async fn signup(
     )
     .map_err(|_| Error::Internal)?;
 
-    let signup_response = SignupResponse { token };
-    Ok(HttpResponse::Ok().json(signup_response))
+    let client_url = env::var("CLIENT_URL").map_err(|_| Error::Internal)?;
+    let from = env::var("EMAIL_FROM").map_err(|_| Error::Internal)?;
+    let body = format!(
+        "Please click on the URL to authenticate .\n\n{}/signup/verify?token={}",
+        client_url, token
+    );
+    let message = Message::builder()
+        .from(from.parse().map_err(|_| Error::Internal)?)
+        .to(email.parse().map_err(|_| Error::Internal)?)
+        .subject("Welcome!")
+        .body(body)
+        .map_err(|_| Error::Internal)?;
+
+    let api_key = env::var("SENDGRID_API_KEY").map_err(|_| Error::Internal)?;
+    let creds = Credentials::new("apikey".to_string(), api_key);
+
+    let mailer = SmtpTransport::relay("smtp.sendgrid.net")
+        .map_err(|_| Error::Internal)?
+        .credentials(creds)
+        .build();
+
+    mailer.send(&message).map_err(|_| Error::Internal)?;
+
+    Ok(HttpResponse::Ok())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
