@@ -89,14 +89,6 @@ impl error::ResponseError for AppError {
                 message: error.message.clone(),
                 details: vec![],
             }),
-            _ => {
-                error!("Internal error: {:?}", self);
-                HttpResponse::InternalServerError().json(ErrorResponse {
-                    code: "INTERNAL_ERROR".to_string(),
-                    message: "Internal error".to_string(),
-                    details: vec![],
-                })
-            }
         }
     }
 }

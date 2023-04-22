@@ -1,13 +1,16 @@
 use crate::errors::{APILayerError, AppError};
 use crate::models::app_state::AppState;
+use crate::models::user::{User, UserId};
 use crate::validators::password_validator::validate_password;
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use lettre::address::AddressError;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgRow;
+use sqlx::Row;
 use std::env;
 use validator::Validate;
 
@@ -39,14 +42,19 @@ pub async fn signup(
     let password = hash(json.password.clone(), DEFAULT_COST)
         .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
 
-    sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2)")
+    let user = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
         .bind(email.clone())
         .bind(password.clone())
-        .execute(&app_state.pool)
+        .map(|row: PgRow| User {
+            id: UserId(row.get("id")),
+            email: email.clone(),
+            password: password.clone(),
+        })
+        .fetch_one(&app_state.pool)
         .await
         .map_err(AppError::DatabaseQuery)?;
 
-    const EXPIRATION: u64 = 30;
+    const EXPIRATION: u64 = 3600;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -54,7 +62,7 @@ pub async fn signup(
         .as_secs();
 
     let claims = Claims {
-        sub: email.clone(),
+        sub: user.id.0.to_string(),
         exp: now + EXPIRATION,
     };
 
@@ -108,8 +116,24 @@ pub struct SignupVerifyQuery {
     pub token: String,
 }
 
-pub async fn signup_verify(req: web::Query<SignupVerifyQuery>) -> Result<impl Responder, AppError> {
+pub async fn signup_verify(
+    req: web::Query<SignupVerifyQuery>,
+    app_state: web::Data<AppState>,
+) -> Result<impl Responder, AppError> {
     req.validate().map_err(AppError::Validation)?;
+
+    let claims = decode::<Claims>(
+        &req.token,
+        &DecodingKey::from_secret("secret".as_ref()),
+        &Validation::default(),
+    )
+    .map_err(|e| AppError::Unauthorized(APILayerError::new(e.to_string())))?;
+
+    sqlx::query("UPDATE users SET email_verified = true WHERE id = $1")
+        .bind(claims.claims.sub.parse::<i32>().unwrap())
+        .execute(&app_state.pool)
+        .await
+        .map_err(AppError::DatabaseQuery)?;
 
     Ok(HttpResponse::Ok())
 }
