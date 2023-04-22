@@ -8,6 +8,7 @@ use crate::handlers::user_handlers::{
 };
 use std::env;
 
+use crate::errors::APILayerError;
 use crate::handlers::signup_handlers::{signup, signup_verify};
 use crate::models::app_state::AppState;
 use actix_web::{web, App, HttpServer};
@@ -34,6 +35,15 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
+            .app_data(
+                web::JsonConfig::default()
+                    .limit(4096)
+                    .error_handler(|err, _| {
+                        actix_web::Error::from(errors::AppError::Deserialization(
+                            APILayerError::new(err.to_string()),
+                        ))
+                    }),
+            )
             .app_data(web::Data::new(app_state.clone()))
             .service(
                 web::scope("/api").service(

@@ -1603,6 +1603,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-jaeger",
  "serde",
+ "serde_urlencoded",
  "sqlx",
  "tracing",
  "tracing-actix-web",
