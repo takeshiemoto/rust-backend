@@ -2,7 +2,7 @@ include .env
 
 .PHONY: recreate-db
 recreate-db: stop-db
-	docker-compose down -v
+	docker-compose down --volumes
 	docker-compose up -d db
 	sleep 5
 	sqlx database create --database-url=$(DATABASE_URL)

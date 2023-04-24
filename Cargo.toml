@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.3.1"
-sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "macros"] }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "macros", "chrono", "uuid"] }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7.1"
 bcrypt = "0.14.0"
@@ -21,3 +21,5 @@ tracing-actix-web = "0.7"
 jsonwebtoken = "8"
 derive_more = "0.99.17"
 lettre = "0.10.4"
+chrono= "0.4.24"
+uuid = { version = "0.8.2", features = ["serde", "v4"] }

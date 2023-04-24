@@ -4,12 +4,13 @@ use crate::models::user::{User, UserId};
 use crate::validators::password_validator::validate_password;
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use chrono::{Duration, Utc};
 use lettre::address::AddressError;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
+use sqlx::types::Uuid;
 use sqlx::Row;
 use std::env;
 use validator::Validate;
@@ -31,6 +32,9 @@ struct Claims {
     sub: String,
     exp: u64,
 }
+
+#[derive(Debug)]
+pub struct Token(pub Uuid);
 
 pub async fn signup(
     json: web::Json<SignupRequest>,
@@ -54,25 +58,14 @@ pub async fn signup(
         .await
         .map_err(AppError::DatabaseQuery)?;
 
-    const EXPIRATION: u64 = 3600;
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?
-        .as_secs();
-
-    let claims = Claims {
-        sub: user.id.0.to_string(),
-        exp: now + EXPIRATION,
-    };
-
-    let secret_key = "secret";
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret_key.as_ref()),
-    )
-    .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+    let token =
+        sqlx::query("INSERT INTO email_verification_tokens (user_id, expires_at) VALUES ($1, $2) RETURNING token")
+            .bind(user.id.0)
+            .bind(Utc::now() + Duration::hours(24))
+            .map(|row: PgRow| Token(row.get("token")))
+            .fetch_one(&app_state.pool)
+            .await
+            .map_err(AppError::DatabaseQuery)?;
 
     let client_url = env::var("CLIENT_URL")
         .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
@@ -80,7 +73,7 @@ pub async fn signup(
         .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
     let body = format!(
         "Please click on the URL to authenticate .\n\n{}/signup/verify?token={}",
-        client_url, token
+        client_url, token.0
     );
     let message = Message::builder()
         .from(
@@ -116,24 +109,8 @@ pub struct SignupVerifyQuery {
     pub token: String,
 }
 
-pub async fn signup_verify(
-    req: web::Query<SignupVerifyQuery>,
-    app_state: web::Data<AppState>,
-) -> Result<impl Responder, AppError> {
+pub async fn signup_verify(req: web::Query<SignupVerifyQuery>) -> Result<impl Responder, AppError> {
     req.validate().map_err(AppError::Validation)?;
-
-    let claims = decode::<Claims>(
-        &req.token,
-        &DecodingKey::from_secret("secret".as_ref()),
-        &Validation::default(),
-    )
-    .map_err(|e| AppError::Unauthorized(APILayerError::new(e.to_string())))?;
-
-    sqlx::query("UPDATE users SET email_verified = true WHERE id = $1")
-        .bind(claims.claims.sub.parse::<i32>().unwrap())
-        .execute(&app_state.pool)
-        .await
-        .map_err(AppError::DatabaseQuery)?;
 
     Ok(HttpResponse::Ok())
 }
