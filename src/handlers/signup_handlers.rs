@@ -40,17 +40,17 @@ pub async fn signup(
     json: web::Json<SignupRequest>,
     app_state: web::Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    let mut transaction = app_state
-        .pool
-        .begin()
-        .await
-        .map_err(AppError::DatabaseQuery)?;
-
     json.validate().map_err(AppError::Validation)?;
 
     let email = json.email.clone();
     let password = hash(json.password.clone(), DEFAULT_COST)
         .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+
+    let mut transaction = app_state
+        .pool
+        .begin()
+        .await
+        .map_err(AppError::DatabaseQuery)?;
 
     let user = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
         .bind(email.clone())
