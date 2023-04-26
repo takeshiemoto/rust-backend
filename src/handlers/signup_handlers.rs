@@ -40,6 +40,12 @@ pub async fn signup(
     json: web::Json<SignupRequest>,
     app_state: web::Data<AppState>,
 ) -> Result<impl Responder, AppError> {
+    let mut transaction = app_state
+        .pool
+        .begin()
+        .await
+        .map_err(AppError::DatabaseQuery)?;
+
     json.validate().map_err(AppError::Validation)?;
 
     let email = json.email.clone();
@@ -54,7 +60,7 @@ pub async fn signup(
             email: email.clone(),
             password: password.clone(),
         })
-        .fetch_one(&app_state.pool)
+        .fetch_one(&mut transaction)
         .await
         .map_err(AppError::DatabaseQuery)?;
 
@@ -63,7 +69,7 @@ pub async fn signup(
             .bind(user.id.0)
             .bind(Utc::now() + Duration::hours(24))
             .map(|row: PgRow| Token(row.get("token")))
-            .fetch_one(&app_state.pool)
+            .fetch_one(&mut transaction)
             .await
             .map_err(AppError::DatabaseQuery)?;
 
@@ -96,9 +102,19 @@ pub async fn signup(
         .credentials(creds)
         .build();
 
-    mailer
-        .send(&message)
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+    if let Err(e) = mailer.send(&message) {
+        transaction
+            .rollback()
+            .await
+            .map_err(AppError::DatabaseQuery)?;
+
+        return Err(AppError::Internal(APILayerError::new(e.to_string())));
+    }
+
+    transaction
+        .commit()
+        .await
+        .map_err(AppError::DatabaseQuery)?;
 
     Ok(HttpResponse::Ok())
 }
