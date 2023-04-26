@@ -125,8 +125,55 @@ pub struct SignupVerifyQuery {
     pub token: String,
 }
 
-pub async fn signup_verify(req: web::Query<SignupVerifyQuery>) -> Result<impl Responder, AppError> {
+pub async fn signup_verify(
+    req: web::Query<SignupVerifyQuery>,
+    app_state: web::Data<AppState>,
+) -> Result<impl Responder, AppError> {
     req.validate().map_err(AppError::Validation)?;
+
+    let mut transaction = app_state
+        .pool
+        .begin()
+        .await
+        .map_err(AppError::DatabaseQuery)?;
+
+    let user_id = sqlx::query(
+        "SELECT user_id FROM email_verification_tokens WHERE token = $1::uuid AND expires_at > CURRENT_TIMESTAMP",
+    )
+    .bind(req.token.clone())
+    .map(|row: PgRow| UserId(row.get("user_id")))
+    .fetch_optional(&mut transaction)
+    .await
+    .map_err(AppError::DatabaseQuery)?;
+
+    let user_id = match user_id {
+        Some(user_id) => user_id,
+        None => {
+            return Err(AppError::Unauthorized(APILayerError::new(
+                "Token has expired.".to_string(),
+            )));
+        }
+    };
+
+    let user = sqlx::query(
+        "UPDATE users SET email_verified = true WHERE id = $1 RETURNING id, email, password",
+    )
+    .bind(user_id.0)
+    .map(|row: PgRow| User {
+        id: UserId(row.get("id")),
+        email: row.get("email"),
+        password: row.get("password"),
+    })
+    .fetch_one(&mut transaction)
+    .await
+    .map_err(AppError::DatabaseQuery)?;
+
+    println!("{:?}", user);
+
+    transaction
+        .commit()
+        .await
+        .map_err(AppError::DatabaseQuery)?;
 
     Ok(HttpResponse::Ok())
 }
