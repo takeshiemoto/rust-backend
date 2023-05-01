@@ -1,5 +1,6 @@
 mod errors;
 mod handlers;
+mod mailer;
 mod models;
 mod validators;
 

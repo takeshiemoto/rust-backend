@@ -1,4 +1,5 @@
 use crate::errors::{APILayerError, AppError};
+use crate::mailer::send_mail;
 use crate::models::app_state::AppState;
 use crate::models::user::{User, UserId};
 use crate::validators::password_validator::validate_password;
@@ -6,8 +7,7 @@ use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use lettre::address::AddressError;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{Message, SmtpTransport, Transport};
+use lettre::Message;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::types::Uuid;
@@ -93,16 +93,7 @@ pub async fn signup(
         .body(body)
         .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
 
-    let api_key = env::var("SENDGRID_API_KEY")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
-    let creds = Credentials::new("apikey".to_string(), api_key);
-
-    let mailer = SmtpTransport::relay("smtp.sendgrid.net")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?
-        .credentials(creds)
-        .build();
-
-    if let Err(e) = mailer.send(&message) {
+    if let Err(e) = send_mail(&message).await {
         transaction
             .rollback()
             .await
@@ -169,6 +160,39 @@ pub async fn signup_verify(
     .map_err(AppError::DatabaseQuery)?;
 
     println!("{:?}", user);
+
+    let from = env::var("EMAIL_FROM")
+        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+
+    let client_url = env::var("CLIENT_URL")
+        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+
+    let body = format!(
+        "Please login from the following URL .\n\n{}/signin",
+        client_url
+    );
+
+    let message = Message::builder()
+        .from(
+            from.parse()
+                .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?,
+        )
+        .to(user
+            .email
+            .parse()
+            .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?)
+        .subject("Your registration has been completed.!")
+        .body(body)
+        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+
+    if let Err(e) = send_mail(&message).await {
+        transaction
+            .rollback()
+            .await
+            .map_err(AppError::DatabaseQuery)?;
+
+        return Err(AppError::Internal(APILayerError::new(e.to_string())));
+    }
 
     transaction
         .commit()
