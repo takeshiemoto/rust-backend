@@ -6,7 +6,6 @@ use crate::validators::password_validator::validate_password;
 use actix_web::{web, HttpResponse, Responder};
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::{Duration, Utc};
-use lettre::address::AddressError;
 use lettre::Message;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
@@ -40,17 +39,12 @@ pub async fn signup(
     json: web::Json<SignupRequest>,
     app_state: web::Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    json.validate().map_err(AppError::Validation)?;
+    json.validate()?;
 
     let email = json.email.clone();
-    let password = hash(json.password.clone(), DEFAULT_COST)
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+    let password = hash(json.password.clone(), DEFAULT_COST)?;
 
-    let mut transaction = app_state
-        .pool
-        .begin()
-        .await
-        .map_err(AppError::DatabaseQuery)?;
+    let mut transaction = app_state.pool.begin().await?;
 
     let user = sqlx::query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id")
         .bind(email.clone())
@@ -61,8 +55,7 @@ pub async fn signup(
             password: password.clone(),
         })
         .fetch_one(&mut transaction)
-        .await
-        .map_err(AppError::DatabaseQuery)?;
+        .await?;
 
     let token =
         sqlx::query("INSERT INTO email_verification_tokens (user_id, expires_at) VALUES ($1, $2) RETURNING token")
@@ -70,43 +63,27 @@ pub async fn signup(
             .bind(Utc::now() + Duration::hours(24))
             .map(|row: PgRow| Token(row.get("token")))
             .fetch_one(&mut transaction)
-            .await
-            .map_err(AppError::DatabaseQuery)?;
+            .await?;
 
-    let client_url = env::var("CLIENT_URL")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
-    let from = env::var("EMAIL_FROM")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+    let client_url = env::var("CLIENT_URL")?;
+    let from = env::var("EMAIL_FROM")?;
     let body = format!(
         "Please click on the URL to authenticate .\n\n{}/signup/verify?token={}",
         client_url, token.0
     );
+
     let message = Message::builder()
-        .from(
-            from.parse()
-                .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?,
-        )
-        .to(email
-            .parse()
-            .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?)
+        .from(from.parse()?)
+        .to(email.parse()?)
         .subject("Welcome!")
-        .body(body)
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+        .body(body)?;
 
     if let Err(e) = send_mail(&message).await {
-        transaction
-            .rollback()
-            .await
-            .map_err(AppError::DatabaseQuery)?;
-
+        transaction.rollback().await?;
         return Err(AppError::Internal(APILayerError::new(e.to_string())));
     }
 
-    transaction
-        .commit()
-        .await
-        .map_err(AppError::DatabaseQuery)?;
-
+    transaction.commit().await?;
     Ok(HttpResponse::Ok())
 }
 
@@ -120,13 +97,9 @@ pub async fn signup_verify(
     req: web::Query<SignupVerifyQuery>,
     app_state: web::Data<AppState>,
 ) -> Result<impl Responder, AppError> {
-    req.validate().map_err(AppError::Validation)?;
+    req.validate()?;
 
-    let mut transaction = app_state
-        .pool
-        .begin()
-        .await
-        .map_err(AppError::DatabaseQuery)?;
+    let mut transaction = app_state.pool.begin().await?;
 
     let user_id = sqlx::query(
         "SELECT user_id FROM email_verification_tokens WHERE token = $1::uuid AND expires_at > CURRENT_TIMESTAMP",
@@ -134,8 +107,7 @@ pub async fn signup_verify(
     .bind(req.token.clone())
     .map(|row: PgRow| UserId(row.get("user_id")))
     .fetch_optional(&mut transaction)
-    .await
-    .map_err(AppError::DatabaseQuery)?;
+    .await?;
 
     let user_id = match user_id {
         Some(user_id) => user_id,
@@ -156,48 +128,26 @@ pub async fn signup_verify(
         password: row.get("password"),
     })
     .fetch_one(&mut transaction)
-    .await
-    .map_err(AppError::DatabaseQuery)?;
+    .await?;
 
-    println!("{:?}", user);
-
-    let from = env::var("EMAIL_FROM")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
-
-    let client_url = env::var("CLIENT_URL")
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
-
+    let from = env::var("EMAIL_FROM")?;
+    let client_url = env::var("CLIENT_URL")?;
     let body = format!(
         "Please login from the following URL .\n\n{}/signin",
         client_url
     );
 
     let message = Message::builder()
-        .from(
-            from.parse()
-                .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?,
-        )
-        .to(user
-            .email
-            .parse()
-            .map_err(|e: AddressError| AppError::Internal(APILayerError::new(e.to_string())))?)
+        .from(from.parse()?)
+        .to(user.email.parse()?)
         .subject("Your registration has been completed.!")
-        .body(body)
-        .map_err(|e| AppError::Internal(APILayerError::new(e.to_string())))?;
+        .body(body)?;
 
     if let Err(e) = send_mail(&message).await {
-        transaction
-            .rollback()
-            .await
-            .map_err(AppError::DatabaseQuery)?;
-
+        transaction.rollback().await?;
         return Err(AppError::Internal(APILayerError::new(e.to_string())));
     }
 
-    transaction
-        .commit()
-        .await
-        .map_err(AppError::DatabaseQuery)?;
-
+    transaction.commit().await?;
     Ok(HttpResponse::Ok())
 }

@@ -1,15 +1,26 @@
-use derive_more::{Display, Error};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::Error;
 use lettre::{Message, SmtpTransport, Transport};
 use std::env;
 use std::env::VarError;
+use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug)]
 pub enum SendMailError {
     EnvVar(VarError),
-    Send(lettre::transport::smtp::Error),
+    Send(Error),
 }
+
+impl Display for SendMailError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            SendMailError::EnvVar(ref e) => write!(f, "EnvVar: {}", e),
+            SendMailError::Send(ref e) => write!(f, "Send: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for SendMailError {}
 
 impl From<VarError> for SendMailError {
     fn from(value: VarError) -> Self {
@@ -17,7 +28,7 @@ impl From<VarError> for SendMailError {
     }
 }
 
-impl From<lettre::transport::smtp::Error> for SendMailError {
+impl From<Error> for SendMailError {
     fn from(value: Error) -> Self {
         Self::Send(value)
     }

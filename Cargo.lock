@@ -1708,7 +1708,6 @@ dependencies = [
  "actix-web",
  "bcrypt",
  "chrono",
- "derive_more",
  "dotenvy",
  "jsonwebtoken",
  "lettre",

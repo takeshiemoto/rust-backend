@@ -1,10 +1,14 @@
 use actix_web::{error, HttpResponse};
-use derive_more::{Display, Error};
+use bcrypt::BcryptError;
+use lettre::address::AddressError;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::env::VarError;
+use std::error::Error;
+use std::fmt::Display;
 use tracing::log::error;
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug)]
 pub enum AppError {
     Deserialization(APILayerError),
     Validation(validator::ValidationErrors),
@@ -13,10 +17,68 @@ pub enum AppError {
     Internal(APILayerError),
 }
 
-#[derive(Debug, Display, Error)]
+impl Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::Deserialization(e) => write!(f, "Deserialization error: {:?}", e),
+            AppError::Validation(e) => write!(f, "Validation error: {:?}", e),
+            AppError::DatabaseQuery(e) => write!(f, "Database query error: {:?}", e),
+            AppError::Unauthorized(e) => write!(f, "Unauthorized error: {:?}", e),
+            AppError::Internal(e) => write!(f, "Internal error: {:?}", e),
+        }
+    }
+}
+
+impl Error for AppError {}
+
+impl From<validator::ValidationErrors> for AppError {
+    fn from(error: validator::ValidationErrors) -> Self {
+        AppError::Validation(error)
+    }
+}
+
+impl From<BcryptError> for AppError {
+    fn from(error: BcryptError) -> Self {
+        AppError::Internal(APILayerError::new(error.to_string()))
+    }
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(error: sqlx::Error) -> Self {
+        AppError::DatabaseQuery(error)
+    }
+}
+
+impl From<VarError> for AppError {
+    fn from(error: VarError) -> Self {
+        AppError::Internal(APILayerError::new(error.to_string()))
+    }
+}
+
+impl From<AddressError> for AppError {
+    fn from(error: AddressError) -> Self {
+        AppError::Internal(APILayerError::new(error.to_string()))
+    }
+}
+
+impl From<lettre::error::Error> for AppError {
+    fn from(error: lettre::error::Error) -> Self {
+        AppError::Internal(APILayerError::new(error.to_string()))
+    }
+}
+
+#[derive(Debug)]
 pub struct APILayerError {
     pub message: String,
 }
+
+impl Display for APILayerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.message)
+    }
+}
+
+impl Error for APILayerError {}
 
 impl APILayerError {
     pub fn new(message: String) -> Self {
