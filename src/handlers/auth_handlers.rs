@@ -186,6 +186,7 @@ pub async fn signin(
     }
 }
 
-pub async fn signout() -> Result<impl Responder, AppError> {
+pub async fn signout(session: Session) -> Result<impl Responder, AppError> {
+    session.clear();
     Ok(HttpResponse::Ok())
 }
