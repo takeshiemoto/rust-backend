@@ -3,8 +3,9 @@ use crate::mailer::send_mail;
 use crate::models::app_state::AppState;
 use crate::models::user::{User, UserId};
 use crate::validators::password_validator::validate_password;
+use actix_session::Session;
 use actix_web::{web, HttpResponse, Responder};
-use bcrypt::{hash, DEFAULT_COST};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{Duration, Utc};
 use lettre::Message;
 use serde::{Deserialize, Serialize};
@@ -24,12 +25,6 @@ pub struct SignupRequest {
         message = "Invalid password"
     ))]
     pub password: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String,
-    exp: u64,
 }
 
 #[derive(Debug)]
@@ -149,5 +144,48 @@ pub async fn signup_verify(
     }
 
     transaction.commit().await?;
+    Ok(HttpResponse::Ok())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SigninRequest {
+    pub email: String,
+    pub password: String,
+}
+
+pub async fn signin(
+    session: Session,
+    json: web::Json<SigninRequest>,
+    app_state: web::Data<AppState>,
+) -> Result<impl Responder, AppError> {
+    let user = match sqlx::query("SELECT id, email, password FROM users WHERE email = $1")
+        .bind(json.email.clone())
+        .map(|row: PgRow| User {
+            id: UserId(row.get("id")),
+            email: row.get("email"),
+            password: row.get("password"),
+        })
+        .fetch_optional(&app_state.pool)
+        .await?
+    {
+        Some(user) => user,
+        None => {
+            return Err(AppError::Unauthorized(APILayerError::new(
+                "User not found".to_string(),
+            )))
+        }
+    };
+
+    if verify(json.password.clone(), &user.password)? {
+        session.insert("user_id".to_string(), user.id.0).unwrap();
+        Ok(HttpResponse::Ok())
+    } else {
+        Err(AppError::Unauthorized(APILayerError::new(
+            "Invalid password".to_string(),
+        )))
+    }
+}
+
+pub async fn signout() -> Result<impl Responder, AppError> {
     Ok(HttpResponse::Ok())
 }

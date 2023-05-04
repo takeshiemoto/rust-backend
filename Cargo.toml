@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.3.1"
+actix-session = { version = "0.7.2", features = ["redis-rs-session"]}
 sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "macros", "chrono", "uuid"] }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7.1"

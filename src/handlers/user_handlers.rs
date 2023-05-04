@@ -1,9 +1,6 @@
 use actix_web::{HttpResponse, Responder};
-use tracing::{info, instrument};
 
-#[instrument]
 pub async fn get_users() -> impl Responder {
-    info!("Called get_users");
     HttpResponse::Ok().body("get_users")
 }
 

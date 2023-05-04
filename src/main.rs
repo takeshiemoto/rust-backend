@@ -7,11 +7,15 @@ mod validators;
 use crate::handlers::user_handlers::{
     create_users, delete_users, get_users, get_users_by_id, update_users,
 };
+use actix_session::config::PersistentSession;
+use actix_session::storage::RedisSessionStore;
+use actix_session::SessionMiddleware;
 use std::env;
 
 use crate::errors::APILayerError;
-use crate::handlers::signup_handlers::{signup, signup_verify};
+use crate::handlers::auth_handlers::{signin, signout, signup, signup_verify};
 use crate::models::app_state::AppState;
+use actix_web::cookie::time::Duration;
 use actix_web::{web, App, HttpServer};
 use dotenvy::dotenv;
 use opentelemetry::global;
@@ -30,12 +34,29 @@ async fn main() -> std::io::Result<()> {
     init_telemetry();
 
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pool = PgPool::connect(&db_url).await.unwrap();
+    let pool = PgPool::connect(&db_url)
+        .await
+        .expect("Failed to connect to Postgres");
     let app_state = AppState { pool };
+
+    let key = actix_web::cookie::Key::generate();
+    let session_store_url = env::var("SESSION_STORE_URL").expect("SESSION_STORE_URL must be set");
+    let session_key = env::var("SESSION_KEY").expect("SESSION_KEY must be set");
+    let redis_store = RedisSessionStore::new(&session_store_url)
+        .await
+        .expect("Failed to connect to Redis");
 
     HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
+            .wrap(
+                SessionMiddleware::builder(redis_store.clone(), key.clone())
+                    .session_lifecycle(
+                        PersistentSession::default().session_ttl(Duration::minutes(5)),
+                    )
+                    .cookie_name(session_key.to_string())
+                    .build(),
+            )
             .app_data(
                 web::JsonConfig::default()
                     .limit(4096)
@@ -58,9 +79,14 @@ async fn main() -> std::io::Result<()> {
                                 .route("/{id}", web::delete().to(delete_users)),
                         )
                         .service(
-                            web::scope("/signup")
-                                .route("", web::post().to(signup))
-                                .route("/verify", web::get().to(signup_verify)),
+                            web::scope("/auth")
+                                .service(
+                                    web::scope("/signup")
+                                        .route("", web::post().to(signup))
+                                        .route("/verify", web::get().to(signup_verify)),
+                                )
+                                .route("/signin", web::post().to(signin))
+                                .route("/signout", web::post().to(signout)),
                         ),
                 ),
             )
