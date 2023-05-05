@@ -7,6 +7,7 @@ mod validators;
 use crate::handlers::user_handlers::{
     create_users, delete_users, get_users, get_users_by_id, update_users,
 };
+use actix_cors::Cors;
 use actix_session::config::PersistentSession;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -46,9 +47,20 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to Redis");
 
+    let cors_allowed_origin = env::var("CLIENT_URL").expect("CLIENT_URL must be set");
+    let cors_max_age = env::var("CORS_MAX_AGE")
+        .expect("CORS_MAX_AGE must be set")
+        .parse::<usize>()
+        .expect("CORS_MAX_AGE must be a valid u32");
+
     HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
+            .wrap(
+                Cors::default()
+                    .allowed_origin(&cors_allowed_origin)
+                    .max_age(cors_max_age),
+            )
             .wrap(
                 SessionMiddleware::builder(redis_store.clone(), key.clone())
                     .session_lifecycle(
