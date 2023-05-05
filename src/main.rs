@@ -59,6 +59,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(
                 Cors::default()
                     .allowed_origin(&cors_allowed_origin)
+                    .allow_any_header()
+                    .allow_any_method()
                     .max_age(cors_max_age),
             )
             .wrap(
