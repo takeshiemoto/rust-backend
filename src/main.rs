@@ -51,7 +51,7 @@ async fn main() -> std::io::Result<()> {
     let cors_max_age = env::var("CORS_MAX_AGE")
         .expect("CORS_MAX_AGE must be set")
         .parse::<usize>()
-        .expect("CORS_MAX_AGE must be a valid u32");
+        .expect("CORS_MAX_AGE must be a valid usize");
 
     HttpServer::new(move || {
         App::new()
