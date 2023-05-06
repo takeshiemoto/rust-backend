@@ -125,6 +125,13 @@ pub async fn signup_verify(
     .fetch_one(&mut transaction)
     .await?;
 
+    sqlx::query(
+        "UPDATE email_verification_tokens SET expires_at = CURRENT_TIMESTAMP WHERE token = $1::uuid",
+    )
+    .bind(req.token.clone())
+    .execute(&mut transaction)
+    .await?;
+
     let from = env::var("EMAIL_FROM")?;
     let client_url = env::var("CLIENT_URL")?;
     let body = format!(
